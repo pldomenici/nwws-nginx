@@ -10,11 +10,13 @@ HOST="${1:-oracle-hermes}"
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 echo "=== copying configs to $HOST ==="
-scp "$REPO_DIR/conf.d/radar-cache.conf" "$HOST:/tmp/"
+scp "$REPO_DIR/nginx.conf" "$HOST:/tmp/nginx.conf"
+scp "$REPO_DIR/conf.d/radar-cache.conf" "$HOST:/tmp/radar-cache.conf"
 scp "$REPO_DIR/ssl/hermes-cert.pem" "$HOST:/tmp/hermes-cert.pem"
 
 echo "=== installing + testing ==="
-ssh "$HOST" "sudo cp /tmp/radar-cache.conf /etc/nginx/conf.d/radar-cache.conf && \
+ssh "$HOST" "sudo cp /tmp/nginx.conf /etc/nginx/nginx.conf && \
+             sudo cp /tmp/radar-cache.conf /etc/nginx/conf.d/radar-cache.conf && \
              sudo cp /tmp/hermes-cert.pem /etc/nginx/ssl/hermes-cert.pem && \
              sudo nginx -t"
 
