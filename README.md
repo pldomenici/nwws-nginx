@@ -9,7 +9,7 @@ front of it.
 ```
 Phone ──▶ nginx :8443 (this cache/TLS edge) ──▶ origin 127.0.0.1:8444 (aiohttp, podman)
               │
-              └─ proxy_cache radar (16 GB) + map (8 GB), on /var/cache/nginx
+              └─ proxy_cache radar (16 GB, inactive 2h) + map (32 GB, inactive 60d), on /var/cache/nginx
 ```
 
 ## Layout
@@ -27,23 +27,27 @@ Phone ──▶ nginx :8443 (this cache/TLS edge) ──▶ origin 127.0.0.1:844
 Two zones with deliberately different eviction policies, both on the root
 filesystem (183G) under `/var/cache/nginx` (SELinux `httpd_cache_t`):
 
-- **radar** (`keys_zone=radar:128m`, `max_size=16g`, `inactive=24h`): radar
+- **radar** (`keys_zone=radar:128m`, `max_size=16g`, `inactive=2h`): radar
   tile images (`radar_dbz`, `radar_tiles` PNG, `radar_dbz_times`/`meta`/`time`).
-  Evicted after 24 h without requests; freshness is origin-driven
-  (Cache-Control is honored — `proxy_ignore_headers` removed): per-site tiles
-  `max-age=86400`, MRMS_* mosaics `240s`, stale-while-error fallbacks
-  `no-store` (never cached). `proxy_cache_valid 200 24h` is only a fallback
-  for responses without explicit Cache-Control.
-- **map** (`keys_zone=map:64m`, `max_size=8g`, `inactive=14d`): basemap
-  vector tiles (`vtiles/*.pbf`) — immutable per z/x/y, `proxy_cache_valid 200 7d`.
+  Evicted after 2 h without requests (live-only — no scrub/replay of old
+  `time=` keys). Freshness is origin-driven (Cache-Control honored):
+  per-site `radar_dbz` `max-age=86400`, MRMS_* mosaics `240s`,
+  `radar_tiles` PNG `public, max-age={ttl}` (empty tiles shorter),
+  stale-while-error fallbacks `no-store` (never cached).
+  `proxy_cache_valid 200 24h` is only a fallback without Cache-Control.
+- **map** (`keys_zone=map:64m`, `max_size=32g`, `inactive=60d`): basemap
+  vector tiles (`vtiles/*.pbf`) — immutable per z/x/y, long origin max-age,
+  `proxy_cache_valid 200 60d` fallback.
 
 Key rules (all learned in production):
 
-- **Cache keys exclude `fcm_token` / `device_secret`** — keyed on
-  `$uri` + `site/product/time/min_dbz/despeckle/clutter` (+ `after/limit` for
-  `radar_dbz_times`) only, so every device shares tile entries. The times
-  endpoint MUST be keyed on `after=`/`limit=`, or an incremental slide-in
-  request hits the cached initial answer and stalls (fixed 2026-09-05).
+- **Cache keys exclude `fcm_token` / `device_secret` / `tile_token`** — tile
+  location keyed on `$uri` + `site/product/layer/time/min_dbz/despeckle/clutter`
+  (`layer=` required so Canada/CONUS PNG layers do not collide); times
+  endpoints add `after=`/`limit=` or an incremental slide-in hits a cached
+  initial answer and stalls (fixed 2026-09-05).
+- **`radar_tiles` PNG must be `public`** at the origin — `private` is ignored
+  by nginx shared `proxy_cache`, so Canada/CONUS PNGs never got edge HITs.
 - **vstyles are NOT cached** — their JSON is rewritten per-device with that
   device's auth baked into tile URLs; caching would leak tokens.
 - `proxy_cache_use_stale updating error timeout http_500 http_502 http_503` —
