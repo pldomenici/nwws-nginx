@@ -31,8 +31,8 @@ filesystem (183G) under `/var/cache/nginx` (SELinux `httpd_cache_t`):
   tile images (`radar_dbz`, `radar_tiles` PNG, `radar_dbz_times`/`meta`/`time`).
   Evicted after 2 h without requests (live-only — no scrub/replay of old
   `time=` keys). Freshness is origin-driven (Cache-Control honored):
-  per-site `radar_dbz` `max-age=86400`, MRMS_* mosaics `240s`,
-  `radar_tiles` PNG `public, max-age={ttl}` (empty tiles shorter),
+  per-site `radar_dbz` `max-age=86400`, MRMS_* mosaics `max-age=7200` (2h),
+  `radar_tiles` PNG `public, max-age=7200` (empty tiles shorter),
   stale-while-error fallbacks `no-store` (never cached).
   `proxy_cache_valid 200 24h` is only a fallback without Cache-Control.
 - **map** (`keys_zone=map:64m`, `max_size=32g`, `inactive=60d`): basemap
